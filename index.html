@@ -100,6 +100,22 @@
             display: none;
             background-image: url('congrats.png');
             z-index: 20;
+            position: relative;
+        }
+
+        /* Romantic green neon typography positioned at the bottom to avoid covering the background face */
+        #congrats-text {
+            position: absolute;
+            bottom: 120px;
+            width: 100%;
+            text-align: center;
+            font-size: 32px;
+            font-family: 'Brush Script MT', cursive, sans-serif;
+            font-weight: bold;
+            color: #00ff66;
+            text-shadow: 0 0 10px #00ff66, 0 0 20px #00ff66, 0 0 30px #00cc44;
+            letter-spacing: 2px;
+            pointer-events: none;
         }
     </style>
 </head>
@@ -122,7 +138,8 @@
 
         <!-- Congrats Screen -->
         <div id="congrats-screen" class="screen">
-            <button id="start-btn" onclick="location.reload()" style="margin-top: 350px;">Play Again</button>
+            <div id="congrats-text">Thank you for saving me</div>
+            <button id="start-btn" onclick="location.reload()" style="margin-top: 380px;">Play Again</button>
         </div>
     </div>
 
@@ -163,7 +180,6 @@
         const princessImg = new Image();
         princessImg.src = 'princess.png';
 
-        // 1. Larger, well-proportioned player dimensions for absolute clarity
         let player = {
             x: 350,
             y: 490,
@@ -177,7 +193,9 @@
         let targetPrincess = null;
         let keys = {};
         let chainOffset = 0;
-        let bulletCooldown = 0;
+        let autoBulletTimer = 0;
+        let fireworks = [];
+        let levelCompleteTimer = 0;
 
         window.addEventListener('keydown', (e) => {
             keys[e.code] = true;
@@ -207,11 +225,12 @@
             bullets = [];
             chainMonsters = [];
             chainOffset = 0;
-            bulletCooldown = 0;
+            autoBulletTimer = 0;
+            fireworks = [];
+            levelCompleteTimer = 0;
 
             const alienEmojis = stageAliens[level - 1];
             
-            // 2. Significantly fewer emojis for stage 1 (only 12), scaling up for later stages
             let totalMonsters = (level === 1) ? 12 : (25 + (level * 5));
             for (let i = 0; i < totalMonsters; i++) {
                 chainMonsters.push({
@@ -223,7 +242,6 @@
                 });
             }
 
-            // 1. Larger, proportional princess target positioned safely on upper canvas
             targetPrincess = {
                 x: canvas.width / 2 - 50,
                 y: 10,
@@ -233,15 +251,56 @@
             };
         }
 
+        function triggerFireworks() {
+            const flowerEmojis = ['🌸', '🌺', '🌼', '🌻', '🌷', '💮'];
+            let originX = targetPrincess.x + targetPrincess.width / 2;
+            let originY = targetPrincess.y + targetPrincess.height / 2;
+
+            for (let i = 0; i < 35; i++) {
+                let angle = Math.random() * Math.PI * 2;
+                let speed = 2 + Math.random() * 5;
+                fireworks.push({
+                    x: originX,
+                    y: originY,
+                    vx: Math.cos(angle) * speed,
+                    vy: Math.sin(angle) * speed,
+                    emoji: flowerEmojis[Math.floor(Math.random() * flowerEmojis.length)],
+                    alpha: 1.0,
+                    life: 60 + Math.random() * 30
+                });
+            }
+        }
+
         function update() {
             if (!gameActive) return;
 
+            // If level completion transition animation is running
+            if (levelCompleteTimer > 0) {
+                levelCompleteTimer--;
+                fireworks.forEach(f => {
+                    f.x += f.vx;
+                    f.y += f.vy;
+                    f.alpha -= 0.015;
+                });
+                if (levelCompleteTimer === 0) {
+                    if (currentLevel < 4) {
+                        currentLevel++;
+                        loadLevel(currentLevel);
+                    } else {
+                        gameActive = false;
+                        canvas.style.display = 'none';
+                        document.getElementById('hud').style.display = 'none';
+                        document.getElementById('congrats-screen').style.display = 'flex';
+                    }
+                }
+                return;
+            }
+
             let activeCount = chainMonsters.filter(m => m.alive).length;
 
-            if (bulletCooldown > 0) bulletCooldown--;
-
-            // Fast continuous shooting
-            if ((keys['Space'] || keys['ArrowUp'] || keys['KeyW']) && bulletCooldown === 0 && activeCount > 0) {
+            // Automatic continuous bullet emission
+            autoBulletTimer++;
+            if (autoBulletTimer >= 10) { // Fires automatically every 10 frames
                 bullets.push({
                     x: player.x + player.width / 2 - 3,
                     y: player.y,
@@ -249,16 +308,15 @@
                     height: 14,
                     speed: 14
                 });
-                bulletCooldown = 5;
+                autoBulletTimer = 0;
             }
 
-            // 5. FIXED: Unrestricted 4-directional flight movement across the *entire* canvas map at all times so the knight can easily reach the princess!
+            // Unrestricted 4-directional flight movement across the entire canvas map
             if (keys['ArrowLeft'] || keys['KeyA']) player.x -= player.speed;
             if (keys['ArrowRight'] || keys['KeyD']) player.x += player.speed;
             if (keys['ArrowUp'] || keys['KeyW']) player.y -= player.speed;
             if (keys['ArrowDown'] || keys['KeyS']) player.y += player.speed;
 
-            // Screen boundary clamping
             if (player.x < 10) player.x = 10;
             if (player.x > canvas.width - player.width - 10) player.x = canvas.width - player.width - 10;
             if (player.y < 10) player.y = 10;
@@ -272,7 +330,7 @@
                 }
             }
 
-            // 3. Rolling emojis movement (3. Completely invisible connecting lines/chains)
+            // Rolling emojis movement (invisible connecting lines/chains)
             if (activeCount > 0) {
                 chainOffset += 2.8 + (currentLevel * 0.5);
 
@@ -293,7 +351,6 @@
                         m.x = xPos;
                         m.y = yPos;
 
-                        // Collision with player resets level
                         let hitBoxPadding = 15;
                         if (player.x + hitBoxPadding < m.x + m.width &&
                             player.x + player.width - hitBoxPadding > m.x &&
@@ -306,7 +363,6 @@
                 });
             }
 
-            // Activate princess goal once all emojis are eliminated
             if (activeCount === 0 && !targetPrincess.active) {
                 targetPrincess.active = true;
             }
@@ -326,33 +382,53 @@
                 }
             }
 
-            // Fly and touch the princess to win/advance stage
-            if (targetPrincess.active) {
+            // Touch princess to trigger celebration firework flowers and stage progression
+            if (targetPrincess.active && levelCompleteTimer === 0) {
                 if (player.x < targetPrincess.x + targetPrincess.width &&
                     player.x + player.width > targetPrincess.x &&
                     player.y < targetPrincess.y + targetPrincess.height &&
                     player.y + player.height > targetPrincess.y) {
-                    advanceStage();
+                    triggerFireworks();
+                    levelCompleteTimer = 70; // pause to display celebration animation
                 }
-            }
-        }
-
-        function advanceStage() {
-            if (currentLevel < 4) {
-                currentLevel++;
-                loadLevel(currentLevel);
-            } else {
-                gameActive = false;
-                canvas.style.display = 'none';
-                document.getElementById('hud').style.display = 'none';
-                document.getElementById('congrats-screen').style.display = 'flex';
             }
         }
 
         function draw() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-            // 4. Bright, vivid white neon border glow shining directly from the brink of the knight photo
+            // Draw celebration firework flowers erupting from behind princess photo
+            if (fireworks.length > 0) {
+                ctx.save();
+                ctx.font = '24px serif';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                fireworks.forEach(f => {
+                    ctx.globalAlpha = Math.max(0, f.alpha);
+                    ctx.fillText(f.emoji, f.x, f.y);
+                });
+                ctx.restore();
+            }
+
+            // Draw Princess Goal with white neon halo
+            if (targetPrincess.active) {
+                ctx.save();
+                ctx.shadowColor = '#ffffff';
+                ctx.shadowBlur = 30;
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 4;
+                ctx.strokeRect(targetPrincess.x - 3, targetPrincess.y - 3, targetPrincess.width + 6, targetPrincess.height + 6);
+
+                if (princessImg.complete && princessImg.naturalHeight !== 0) {
+                    ctx.drawImage(princessImg, targetPrincess.x, targetPrincess.y, targetPrincess.width, targetPrincess.height);
+                } else {
+                    ctx.fillStyle = '#ff69b4';
+                    ctx.fillRect(targetPrincess.x, targetPrincess.y, targetPrincess.width, targetPrincess.height);
+                }
+                ctx.restore();
+            }
+
+            // Draw Knight Player with white neon halo
             ctx.save();
             ctx.shadowColor = '#ffffff';
             ctx.shadowBlur = 25;
@@ -374,7 +450,7 @@
                 ctx.fillRect(b.x, b.y, b.width, b.height);
             }
 
-            // Draw Rolling Emojis (No connecting lines rendered)
+            // Draw Rolling Emojis
             ctx.font = '28px serif';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
@@ -383,28 +459,10 @@
                     ctx.fillText(m.emoji, m.x + m.width / 2, m.y + m.height / 2);
                 }
             }
-
-            // 4. Bright, vivid white neon border glow shining directly from the brink of the princess photo
-            if (targetPrincess.active) {
-                ctx.save();
-                ctx.shadowColor = '#ffffff';
-                ctx.shadowBlur = 30;
-                ctx.strokeStyle = '#ffffff';
-                ctx.lineWidth = 4;
-                ctx.strokeRect(targetPrincess.x - 3, targetPrincess.y - 3, targetPrincess.width + 6, targetPrincess.height + 6);
-
-                if (princessImg.complete && princessImg.naturalHeight !== 0) {
-                    ctx.drawImage(princessImg, targetPrincess.x, targetPrincess.y, targetPrincess.width, targetPrincess.height);
-                } else {
-                    ctx.fillStyle = '#ff69b4';
-                    ctx.fillRect(targetPrincess.x, targetPrincess.y, targetPrincess.width, targetPrincess.height);
-                }
-                ctx.restore();
-            }
         }
 
         function gameLoop() {
-            if (!gameActive) return;
+            if (!gameActive && levelCompleteTimer === 0) return;
             update();
             draw();
             requestAnimationFrame(gameLoop);
@@ -412,4 +470,3 @@
     </script>
 </body>
 </html>
-
