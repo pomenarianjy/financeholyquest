@@ -92,6 +92,9 @@
             display: block;
             background-size: cover;
             background-position: center;
+            /* Forces crisp, sharp pixel rendering for loaded PNG sprites */
+            image-rendering: pixelated;
+            image-rendering: crisp-edges;
         }
 
         #congrats-screen {
@@ -127,6 +130,9 @@
     <script>
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
+
+        // Ensure canvas draws sharp textures instead of blurry anti-aliasing
+        ctx.imageSmoothingEnabled = false;
 
         let gameActive = false;
         let score = 0;
@@ -164,7 +170,7 @@
             y: 530,
             width: 45,
             height: 45,
-            speed: 6
+            speed: 7
         };
 
         let bullets = [];
@@ -182,7 +188,7 @@
                         y: player.y,
                         width: 6,
                         height: 14,
-                        speed: 8
+                        speed: 9
                     });
                 }
             }
@@ -214,19 +220,17 @@
 
             const alienEmojis = stageAliens[level - 1];
             
-            // Generate rolling chain of connected emoji monsters
-            let totalMonsters = 30;
+            let totalMonsters = 45 + (level * 5);
             for (let i = 0; i < totalMonsters; i++) {
                 chainMonsters.push({
                     index: i,
                     emoji: alienEmojis[i % alienEmojis.length],
                     alive: true,
-                    width: 36,
-                    height: 36
+                    width: 34,
+                    height: 34
                 });
             }
 
-            // Target Princess spawns at top center once chain is cleared
             targetPrincess = {
                 x: canvas.width / 2 - 25,
                 y: 15,
@@ -258,37 +262,36 @@
                 }
             }
 
-            // Rolling chain movement
-            chainOffset += 0.8 + (currentLevel * 0.2);
+            // High-speed rolling chain with aggressive serpentine weave
+            chainOffset += 3.2 + (currentLevel * 0.6);
 
             let activeCount = 0;
             chainMonsters.forEach((m, idx) => {
                 if (m.alive) {
                     activeCount++;
-                    let progressDist = (idx * 45) + chainOffset;
-                    let row = Math.floor(progressDist / 700);
-                    let distanceIntoRow = progressDist % 700;
+                    let progressDist = (idx * 30) + chainOffset;
+                    let row = Math.floor(progressDist / 650);
+                    let distanceIntoRow = progressDist % 650;
 
                     let xPos, yPos;
                     if (row % 2 === 0) {
-                        xPos = 80 + distanceIntoRow;
+                        xPos = 60 + distanceIntoRow + Math.sin(progressDist * 0.05) * 40;
                     } else {
-                        xPos = 720 - distanceIntoRow;
+                        xPos = 740 - distanceIntoRow - Math.cos(progressDist * 0.05) * 40;
                     }
-                    yPos = 50 + (row * 45) + (distanceIntoRow * 0.15);
+                    yPos = 40 + (row * 35) + (distanceIntoRow * 0.22);
 
                     m.x = xPos;
                     m.y = yPos;
 
-                    // Chain hits the knight -> Level reset
-                    if (m.y >= player.y - 15 && m.x > player.x - 20 && m.x < player.x + player.width + 20) {
+                    // Chain hits the knight -> Level reset penalty
+                    if (m.y >= player.y - 12 && m.x > player.x - 15 && m.x < player.x + player.width + 15) {
                         loadLevel(currentLevel);
                         return;
                     }
                 }
             });
 
-            // When chain is fully cleared, activate Princess
             if (activeCount === 0) {
                 targetPrincess.active = true;
             }
@@ -308,7 +311,7 @@
                 }
             }
 
-            // Knight touches Princess (Win Level Condition)
+            // Knight touches Princess to complete level
             if (targetPrincess.active) {
                 if (player.x < targetPrincess.x + targetPrincess.width &&
                     player.x + player.width > targetPrincess.x &&
@@ -334,9 +337,9 @@
         function draw() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-            // Draw chain links
-            ctx.strokeStyle = '#d4af37';
-            ctx.lineWidth = 3;
+            // Draw chain connection lines
+            ctx.strokeStyle = '#ff3333';
+            ctx.lineWidth = 2;
             ctx.beginPath();
             let first = true;
             for (let m of chainMonsters) {
@@ -351,7 +354,7 @@
             }
             ctx.stroke();
 
-            // Draw Knight Player
+            // Draw Knight Player (Crisp Rendering)
             if (knightImg.complete && knightImg.naturalHeight !== 0) {
                 ctx.drawImage(knightImg, player.x, player.y, player.width, player.height);
             } else {
@@ -360,13 +363,13 @@
             }
 
             // Draw Bullets
-            ctx.fillStyle = '#ffcc00';
+            ctx.fillStyle = '#00ffff';
             for (let b of bullets) {
                 ctx.fillRect(b.x, b.y, b.width, b.height);
             }
 
             // Draw Rolling Chain Emoji Monsters
-            ctx.font = '28px serif';
+            ctx.font = '26px serif';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             for (let m of chainMonsters) {
@@ -375,7 +378,7 @@
                 }
             }
 
-            // Draw Princess Goal (Knight must touch her to win level)
+            // Draw Princess Goal (Crisp Rendering)
             if (targetPrincess.active) {
                 if (princessImg.complete && princessImg.naturalHeight !== 0) {
                     ctx.drawImage(princessImg, targetPrincess.x, targetPrincess.y, targetPrincess.width, targetPrincess.height);
