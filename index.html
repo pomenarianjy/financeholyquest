@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>The Finance Holy Quest</title>
+    <!-- Importing a castle/knight-style gothic medieval font from Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=UnifrakturMaguntia&display=swap" rel="stylesheet">
     <style>
         body {
             margin: 0;
@@ -13,13 +15,28 @@
             background-position: center;
             background-repeat: no-repeat;
             display: flex;
+            flex-direction: column;
             justify-content: center;
             align-items: center;
             height: 100vh;
+            width: 100vw;
             overflow: hidden;
             font-family: 'Courier New', Courier, monospace;
             color: #fff;
             touch-action: none;
+        }
+
+        /* Title displayed above the game container using castle/knight typography */
+        #game-title {
+            font-family: 'UnifrakturMaguntia', cursive, serif;
+            font-size: 42px;
+            color: #ffd700;
+            text-shadow: 3px 3px 6px #000, 0 0 15px rgba(212, 175, 55, 0.8);
+            margin-bottom: 15px;
+            text-align: center;
+            letter-spacing: 2px;
+            z-index: 15;
+            pointer-events: none;
         }
 
         #game-container {
@@ -31,7 +48,9 @@
             overflow: hidden;
             background-color: #000;
             max-width: 100vw;
-            max-height: 100vh;
+            max-height: 80vh;
+            aspect-ratio: 4 / 3;
+            box-sizing: border-box;
         }
 
         .screen {
@@ -100,6 +119,7 @@
             image-rendering: crisp-edges;
             width: 100%;
             height: 100%;
+            object-fit: contain;
         }
 
         #congrats-screen {
@@ -109,50 +129,17 @@
             position: relative;
         }
 
-        #mobile-controls {
-            position: absolute;
-            bottom: 15px;
-            left: 0;
-            width: 100%;
-            display: none;
-            justify-content: space-between;
-            padding: 0 20px;
-            box-sizing: border-box;
-            z-index: 8;
-            pointer-events: none;
-        }
-
-        .control-group {
-            display: flex;
-            gap: 15px;
-            pointer-events: auto;
-        }
-
-        .control-btn {
-            width: 65px;
-            height: 65px;
-            background: rgba(0, 0, 0, 0.5);
-            border: 2px solid #ffd700;
-            border-radius: 50%;
-            color: #ffd700;
-            font-size: 24px;
-            font-weight: bold;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            user-select: none;
-            -webkit-user-select: none;
-            -webkit-touch-callout: none;
-            -webkit-tap-highlight-color: transparent;
-            box-shadow: 0 0 10px rgba(212, 175, 55, 0.4);
-        }
-
-        .control-btn:active {
-            background: rgba(212, 175, 55, 0.4);
+        @media (max-width: 600px) {
+            #game-title {
+                font-size: 32px;
+                margin-bottom: 8px;
+            }
         }
     </style>
 </head>
 <body>
+
+    <div id="game-title">The Finance Holy Quest</div>
 
     <div id="game-container">
         <!-- Start Screen -->
@@ -168,18 +155,6 @@
 
         <!-- Canvas -->
         <canvas id="gameCanvas" width="800" height="600" style="display: none;"></canvas>
-
-        <!-- Mobile Touch Controls Overlay -->
-        <div id="mobile-controls">
-            <div class="control-group">
-                <div class="control-btn" id="btn-left">◀</div>
-                <div class="control-btn" id="btn-right">▶</div>
-            </div>
-            <div class="control-group">
-                <div class="control-btn" id="btn-up">▲</div>
-                <div class="control-btn" id="btn-down">▼</div>
-            </div>
-        </div>
 
         <!-- Congrats Screen -->
         <div id="congrats-screen" class="screen">
@@ -252,21 +227,26 @@
         });
 
         function setupTouchControls() {
-            const bindTouch = (id, code) => {
-                const el = document.getElementById(id);
-                if (!el) return;
-                el.addEventListener('touchstart', (e) => { e.preventDefault(); keys[code] = true; }, {passive: false});
-                el.addEventListener('touchend', (e) => { e.preventDefault(); keys[code] = false; }, {passive: false});
-                el.addEventListener('mousedown', (e) => { e.preventDefault(); keys[code] = true; });
-                el.addEventListener('mouseup', (e) => { e.preventDefault(); keys[code] = false; });
-            };
-
-            bindTouch('btn-left', 'ArrowLeft');
-            bindTouch('btn-right', 'ArrowRight');
-            bindTouch('btn-up', 'ArrowUp');
-            bindTouch('btn-down', 'ArrowDown');
-
             canvas.addEventListener('touchmove', (e) => {
+                e.preventDefault();
+                if (!gameActive) return;
+                const rect = canvas.getBoundingClientRect();
+                const touchX = e.touches[0].clientX - rect.left;
+                const touchY = e.touches[0].clientY - rect.top;
+                
+                const scaleX = canvas.width / rect.width;
+                const scaleY = canvas.height / rect.height;
+
+                player.x = (touchX * scaleX) - (player.width / 2);
+                player.y = (touchY * scaleY) - (player.height / 2);
+
+                if (player.x < 10) player.x = 10;
+                if (player.x > canvas.width - player.width - 10) player.x = canvas.width - player.width - 10;
+                if (player.y < 10) player.y = 10;
+                if (player.y > canvas.height - player.height - 10) player.y = canvas.height - player.height - 10;
+            }, {passive: false});
+
+            canvas.addEventListener('touchstart', (e) => {
                 e.preventDefault();
                 if (!gameActive) return;
                 const rect = canvas.getBoundingClientRect();
@@ -292,10 +272,6 @@
             document.getElementById('start-screen').style.display = 'none';
             document.getElementById('hud').style.display = 'flex';
             canvas.style.display = 'block';
-            
-            if (isMobile) {
-                document.getElementById('mobile-controls').style.display = 'flex';
-            }
 
             gameActive = true;
             currentLevel = 1;
@@ -377,7 +353,6 @@
                         gameActive = false;
                         canvas.style.display = 'none';
                         document.getElementById('hud').style.display = 'none';
-                        document.getElementById('mobile-controls').style.display = 'none';
                         document.getElementById('congrats-screen').style.display = 'flex';
                     }
                 }
@@ -386,7 +361,6 @@
 
             let activeCount = chainMonsters.filter(m => m.alive).length;
 
-            // Firing bullets faster and more consecutively (decreased interval threshold and higher velocity)
             autoBulletTimer++;
             if (autoBulletTimer >= 4) {
                 bullets.push({
