@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>The Finance Holy Quest</title>
     <style>
         body {
@@ -19,6 +19,7 @@
             overflow: hidden;
             font-family: 'Courier New', Courier, monospace;
             color: #fff;
+            touch-action: none;
         }
 
         #game-container {
@@ -29,6 +30,9 @@
             box-shadow: 0 0 20px rgba(212, 175, 55, 0.7);
             overflow: hidden;
             background-color: #000;
+            /* Responsive scaling container for mobile screens */
+            max-width: 100vw;
+            max-height: 100vh;
         }
 
         .screen {
@@ -61,12 +65,13 @@
             font-weight: bold;
             color: #ffd700;
             background: rgba(0, 0, 0, 0.6);
-            padding: 10px 30px;
+            padding: 15px 35px;
             border: 2px solid #ffd700;
             border-radius: 10px;
             cursor: pointer;
             animation: pulse 1.5s infinite;
             margin-top: 150px;
+            -webkit-tap-highlight-color: transparent;
         }
 
         #start-btn:hover {
@@ -94,6 +99,8 @@
             background-position: center;
             image-rendering: pixelated;
             image-rendering: crisp-edges;
+            width: 100%;
+            height: 100%;
         }
 
         #congrats-screen {
@@ -103,7 +110,6 @@
             position: relative;
         }
 
-        /* Romantic green neon typography positioned at the bottom to avoid covering the background face */
         #congrats-text {
             position: absolute;
             bottom: 120px;
@@ -116,6 +122,51 @@
             text-shadow: 0 0 10px #00ff66, 0 0 20px #00ff66, 0 0 30px #00cc44;
             letter-spacing: 2px;
             pointer-events: none;
+            padding: 0 10px;
+            box-sizing: border-box;
+        }
+
+        /* On-screen mobile controls overlay */
+        #mobile-controls {
+            position: absolute;
+            bottom: 15px;
+            left: 0;
+            width: 100%;
+            display: none;
+            justify-content: space-between;
+            padding: 0 20px;
+            box-sizing: border-box;
+            z-index: 8;
+            pointer-events: none;
+        }
+
+        .control-group {
+            display: flex;
+            gap: 15px;
+            pointer-events: auto;
+        }
+
+        .control-btn {
+            width: 65px;
+            height: 65px;
+            background: rgba(0, 0, 0, 0.5);
+            border: 2px solid #ffd700;
+            border-radius: 50%;
+            color: #ffd700;
+            font-size: 24px;
+            font-weight: bold;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            user-select: none;
+            -webkit-user-select: none;
+            -webkit-touch-callout: none;
+            -webkit-tap-highlight-color: transparent;
+            box-shadow: 0 0 10px rgba(212, 175, 55, 0.4);
+        }
+
+        .control-btn:active {
+            background: rgba(212, 175, 55, 0.4);
         }
     </style>
 </head>
@@ -135,6 +186,18 @@
 
         <!-- Canvas -->
         <canvas id="gameCanvas" width="800" height="600" style="display: none;"></canvas>
+
+        <!-- Mobile Touch Controls Overlay -->
+        <div id="mobile-controls">
+            <div class="control-group">
+                <div class="control-btn" id="btn-left">◀</div>
+                <div class="control-btn" id="btn-right">▶</div>
+            </div>
+            <div class="control-group">
+                <div class="control-btn" id="btn-up">▲</div>
+                <div class="control-btn" id="btn-down">▼</div>
+            </div>
+        </div>
 
         <!-- Congrats Screen -->
         <div id="congrats-screen" class="screen">
@@ -197,6 +260,9 @@
         let fireworks = [];
         let levelCompleteTimer = 0;
 
+        // Detect if mobile device
+        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth <= 768;
+
         window.addEventListener('keydown', (e) => {
             keys[e.code] = true;
         });
@@ -205,10 +271,55 @@
             keys[e.code] = false;
         });
 
+        // Touch event bindings for on-screen mobile buttons
+        function setupTouchControls() {
+            const bindTouch = (id, code) => {
+                const el = document.getElementById(id);
+                if (!el) return;
+                el.addEventListener('touchstart', (e) => { e.preventDefault(); keys[code] = true; }, {passive: false});
+                el.addEventListener('touchend', (e) => { e.preventDefault(); keys[code] = false; }, {passive: false});
+                el.addEventListener('mousedown', (e) => { e.preventDefault(); keys[code] = true; });
+                el.addEventListener('mouseup', (e) => { e.preventDefault(); keys[code] = false; });
+            };
+
+            bindTouch('btn-left', 'ArrowLeft');
+            bindTouch('btn-right', 'ArrowRight');
+            bindTouch('btn-up', 'ArrowUp');
+            bindTouch('btn-down', 'ArrowDown');
+
+            // Allow touching anywhere on canvas to drag/move smoothly on mobile
+            canvas.addEventListener('touchmove', (e) => {
+                e.preventDefault();
+                if (!gameActive) return;
+                const rect = canvas.getBoundingClientRect();
+                const touchX = e.touches[0].clientX - rect.left;
+                const touchY = e.touches[0].clientY - rect.top;
+                
+                // Scale coordinates to internal canvas resolution (800x600)
+                const scaleX = canvas.width / rect.width;
+                const scaleY = canvas.height / rect.height;
+
+                player.x = (touchX * scaleX) - (player.width / 2);
+                player.y = (touchY * scaleY) - (player.height / 2);
+
+                if (player.x < 10) player.x = 10;
+                if (player.x > canvas.width - player.width - 10) player.x = canvas.width - player.width - 10;
+                if (player.y < 10) player.y = 10;
+                if (player.y > canvas.height - player.height - 10) player.y = canvas.height - player.height - 10;
+            }, {passive: false});
+        }
+
+        setupTouchControls();
+
         function startGame() {
             document.getElementById('start-screen').style.display = 'none';
             document.getElementById('hud').style.display = 'flex';
             canvas.style.display = 'block';
+            
+            if (isMobile) {
+                document.getElementById('mobile-controls').style.display = 'flex';
+            }
+
             gameActive = true;
             currentLevel = 1;
             loadLevel(currentLevel);
@@ -274,7 +385,6 @@
         function update() {
             if (!gameActive) return;
 
-            // If level completion transition animation is running
             if (levelCompleteTimer > 0) {
                 levelCompleteTimer--;
                 fireworks.forEach(f => {
@@ -290,6 +400,7 @@
                         gameActive = false;
                         canvas.style.display = 'none';
                         document.getElementById('hud').style.display = 'none';
+                        document.getElementById('mobile-controls').style.display = 'none';
                         document.getElementById('congrats-screen').style.display = 'flex';
                     }
                 }
@@ -300,7 +411,7 @@
 
             // Automatic continuous bullet emission
             autoBulletTimer++;
-            if (autoBulletTimer >= 10) { // Fires automatically every 10 frames
+            if (autoBulletTimer >= 10) {
                 bullets.push({
                     x: player.x + player.width / 2 - 3,
                     y: player.y,
@@ -311,7 +422,7 @@
                 autoBulletTimer = 0;
             }
 
-            // Unrestricted 4-directional flight movement across the entire canvas map
+            // Keyboard directional flight movement
             if (keys['ArrowLeft'] || keys['KeyA']) player.x -= player.speed;
             if (keys['ArrowRight'] || keys['KeyD']) player.x += player.speed;
             if (keys['ArrowUp'] || keys['KeyW']) player.y -= player.speed;
@@ -322,7 +433,6 @@
             if (player.y < 10) player.y = 10;
             if (player.y > canvas.height - player.height - 10) player.y = canvas.height - player.height - 10;
 
-            // Bullets movement
             for (let i = bullets.length - 1; i >= 0; i--) {
                 bullets[i].y -= bullets[i].speed;
                 if (bullets[i].y < 0) {
@@ -330,7 +440,6 @@
                 }
             }
 
-            // Rolling emojis movement (invisible connecting lines/chains)
             if (activeCount > 0) {
                 chainOffset += 2.8 + (currentLevel * 0.5);
 
@@ -367,7 +476,6 @@
                 targetPrincess.active = true;
             }
 
-            // Bullet vs Emoji Collisions
             for (let i = bullets.length - 1; i >= 0; i--) {
                 let b = bullets[i];
                 for (let m of chainMonsters) {
@@ -382,14 +490,13 @@
                 }
             }
 
-            // Touch princess to trigger celebration firework flowers and stage progression
             if (targetPrincess.active && levelCompleteTimer === 0) {
                 if (player.x < targetPrincess.x + targetPrincess.width &&
                     player.x + player.width > targetPrincess.x &&
                     player.y < targetPrincess.y + targetPrincess.height &&
                     player.y + player.height > targetPrincess.y) {
                     triggerFireworks();
-                    levelCompleteTimer = 70; // pause to display celebration animation
+                    levelCompleteTimer = 70;
                 }
             }
         }
@@ -397,7 +504,6 @@
         function draw() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-            // Draw celebration firework flowers erupting from behind princess photo
             if (fireworks.length > 0) {
                 ctx.save();
                 ctx.font = '24px serif';
@@ -410,7 +516,6 @@
                 ctx.restore();
             }
 
-            // Draw Princess Goal with white neon halo
             if (targetPrincess.active) {
                 ctx.save();
                 ctx.shadowColor = '#ffffff';
@@ -428,7 +533,6 @@
                 ctx.restore();
             }
 
-            // Draw Knight Player with white neon halo
             ctx.save();
             ctx.shadowColor = '#ffffff';
             ctx.shadowBlur = 25;
@@ -444,13 +548,11 @@
             }
             ctx.restore();
 
-            // Draw Bullets
             ctx.fillStyle = '#00ffff';
             for (let b of bullets) {
                 ctx.fillRect(b.x, b.y, b.width, b.height);
             }
 
-            // Draw Rolling Emojis
             ctx.font = '28px serif';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
