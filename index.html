@@ -26,7 +26,6 @@
             touch-action: none;
         }
 
-        /* Title displayed above the game container using castle/knight typography */
         #game-title {
             font-family: 'UnifrakturMaguntia', cursive, serif;
             font-size: 42px;
@@ -78,7 +77,7 @@
             100% { transform: scale(1); text-shadow: 0 0 10px #ff0; }
         }
 
-        #start-btn {
+        .action-btn {
             font-size: 48px;
             font-weight: bold;
             color: #ffd700;
@@ -88,12 +87,15 @@
             border-radius: 10px;
             cursor: pointer;
             animation: pulse 1.5s infinite;
-            margin-top: 150px;
             -webkit-tap-highlight-color: transparent;
         }
 
-        #start-btn:hover {
+        .action-btn:hover {
             background: rgba(212, 175, 55, 0.3);
+        }
+
+        #start-btn {
+            margin-top: 150px;
         }
 
         #hud {
@@ -122,6 +124,31 @@
             object-fit: contain;
         }
 
+        /* Stage Clear Screen Overlay */
+        #stage-clear-screen {
+            display: none;
+            background: rgba(0, 0, 0, 0.75);
+            z-index: 25;
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+
+        #stage-clear-text {
+            font-family: 'UnifrakturMaguntia', cursive, serif;
+            font-size: 52px;
+            color: #ffd700;
+            text-shadow: 0 0 15px #ff4500, 0 0 25px #ff0;
+            margin-bottom: 30px;
+            text-align: center;
+            letter-spacing: 2px;
+        }
+
         #congrats-screen {
             display: none;
             background-image: url('congrats.png');
@@ -134,6 +161,9 @@
                 font-size: 32px;
                 margin-bottom: 8px;
             }
+            #stage-clear-text {
+                font-size: 38px;
+            }
         }
     </style>
 </head>
@@ -144,7 +174,7 @@
     <div id="game-container">
         <!-- Start Screen -->
         <div id="start-screen" class="screen">
-            <button id="start-btn" onclick="startGame()">Start!</button>
+            <button id="start-btn" class="action-btn" onclick="startGame()">Start!</button>
         </div>
 
         <!-- Main Game HUD -->
@@ -156,9 +186,15 @@
         <!-- Canvas -->
         <canvas id="gameCanvas" width="800" height="600" style="display: none;"></canvas>
 
+        <!-- Stage Clear Screen -->
+        <div id="stage-clear-screen">
+            <div id="stage-clear-text">Stage Cleared!</div>
+            <button class="action-btn" onclick="advanceStage()">Next Stage</button>
+        </div>
+
         <!-- Congrats Screen -->
         <div id="congrats-screen" class="screen">
-            <button id="start-btn" onclick="location.reload()" style="margin-top: 380px;">Play Again</button>
+            <button id="start-btn" class="action-btn" onclick="location.reload()" style="margin-top: 380px;">Play Again</button>
         </div>
     </div>
 
@@ -215,6 +251,7 @@
         let autoBulletTimer = 0;
         let fireworks = [];
         let levelCompleteTimer = 0;
+        let waitingForNextStage = false;
 
         const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth <= 768;
 
@@ -292,6 +329,7 @@
             autoBulletTimer = 0;
             fireworks = [];
             levelCompleteTimer = 0;
+            waitingForNextStage = false;
 
             const alienEmojis = stageAliens[level - 1];
             
@@ -335,8 +373,25 @@
             }
         }
 
+        function advanceStage() {
+            document.getElementById('stage-clear-screen').style.display = 'none';
+            if (currentLevel < 4) {
+                currentLevel++;
+                loadLevel(currentLevel);
+                gameActive = true;
+                gameLoop();
+            } else {
+                gameActive = false;
+                canvas.style.display = 'none';
+                document.getElementById('hud').style.display = 'none';
+                document.getElementById('congrats-screen').style.display = 'flex';
+            }
+        }
+
         function update() {
             if (!gameActive) return;
+
+            if (waitingForNextStage) return;
 
             if (levelCompleteTimer > 0) {
                 levelCompleteTimer--;
@@ -346,15 +401,9 @@
                     f.alpha -= 0.015;
                 });
                 if (levelCompleteTimer === 0) {
-                    if (currentLevel < 4) {
-                        currentLevel++;
-                        loadLevel(currentLevel);
-                    } else {
-                        gameActive = false;
-                        canvas.style.display = 'none';
-                        document.getElementById('hud').style.display = 'none';
-                        document.getElementById('congrats-screen').style.display = 'flex';
-                    }
+                    gameActive = false;
+                    document.getElementById('stage-clear-screen').style.display = 'flex';
+                    waitingForNextStage = true;
                 }
                 return;
             }
@@ -514,10 +563,12 @@
         }
 
         function gameLoop() {
-            if (!gameActive && levelCompleteTimer === 0) return;
+            if (!gameActive) return;
             update();
             draw();
-            requestAnimationFrame(gameLoop);
+            if (gameActive) {
+                requestAnimationFrame(gameLoop);
+            }
         }
     </script>
 </body>
