@@ -31,7 +31,6 @@
             background-color: #111;
         }
 
-        /* Screen overlays */
         .screen {
             position: absolute;
             top: 0;
@@ -51,7 +50,6 @@
             background-image: url('start.png');
         }
 
-        /* Animation for Start button */
         @keyframes pulse {
             0% { transform: scale(1); text-shadow: 0 0 10px #ff0; }
             50% { transform: scale(1.2); text-shadow: 0 0 20px #ff4500, 0 0 30px #ff0; }
@@ -75,7 +73,6 @@
             background: rgba(212, 175, 55, 0.3);
         }
 
-        /* HUD */
         #hud {
             position: absolute;
             top: 10px;
@@ -90,14 +87,12 @@
             pointer-events: none;
         }
 
-        /* Canvas game area */
         canvas {
             display: block;
             background-size: cover;
             background-position: center;
         }
 
-        /* Congrats Screen */
         #congrats-screen {
             display: none;
             background-image: url('congrats.png');
@@ -169,11 +164,10 @@
         // Player (Knight)
         let player = {
             x: 370,
-            y: 520,
-            width: 50,
-            height: 50,
-            speed: 6,
-            dx: 0
+            y: 530,
+            width: 45,
+            height: 45,
+            speed: 5
         };
 
         // Projectiles & Entities
@@ -182,17 +176,25 @@
         let targetPrincess = null;
         let keys = {};
 
+        // Space Invaders Grid Movement Control Variables
+        let alienDirection = 1; // 1 = right, -1 = left
+        let alienStepTimer = 0;
+        let alienStepInterval = 40; // frames per step, decreases as fewer aliens remain
+
         // Event Listeners for Controls
         window.addEventListener('keydown', (e) => {
             keys[e.code] = true;
-            if (e.code === 'Space' && gameActive) {
-                bullets.push({
-                    x: player.x + player.width / 2 - 3,
-                    y: player.y,
-                    width: 6,
-                    height: 12,
-                    speed: 8
-                });
+            // Space Invaders rule: Only 1 active player bullet on screen at a time
+            if ((e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'KeyW') && gameActive) {
+                if (bullets.length === 0) {
+                    bullets.push({
+                        x: player.x + player.width / 2 - 3,
+                        y: player.y,
+                        width: 6,
+                        height: 14,
+                        speed: 8
+                    });
+                }
             }
         });
 
@@ -214,42 +216,43 @@
             document.getElementById('level-indicator').innerText = stageNames[level - 1];
             canvas.style.backgroundImage = `url('${backgrounds[level - 1]}')`;
             
-            // Reset player position
             player.x = 370;
             bullets = [];
             aliens = [];
+            alienDirection = 1;
+            alienStepInterval = 40;
 
-            // Spawn Alien Grid
+            // Spawn classic Space Invaders Grid (rows x cols)
             const alienEmojis = stageAliens[level - 1];
             const rows = 4;
             const cols = 8;
             for (let r = 0; r < rows; r++) {
                 for (let c = 0; c < cols; c++) {
                     aliens.push({
-                        x: 80 + c * 75,
-                        y: 60 + r * 50,
-                        width: 40,
-                        height: 40,
+                        x: 120 + c * 65,
+                        y: 70 + r * 45,
+                        width: 35,
+                        height: 35,
                         emoji: alienEmojis[r],
                         alive: true
                     });
                 }
             }
 
-            // Target Princess setup for the level win condition
+            // Target Princess setup (appears at top center when invaders cleared)
             targetPrincess = {
                 x: canvas.width / 2 - 25,
-                y: 10,
+                y: 15,
                 width: 50,
                 height: 50,
-                active: false // becomes active once all aliens are cleared
+                active: false
             };
         }
 
         function update() {
             if (!gameActive) return;
 
-            // Player movement
+            // Player lateral movement (Left / Right)
             if (keys['ArrowLeft'] || keys['KeyA']) {
                 player.x -= player.speed;
             }
@@ -257,11 +260,11 @@
                 player.x += player.speed;
             }
 
-            // Boundaries
-            if (player.x < 0) player.x = 0;
-            if (player.x > canvas.width - player.width) player.x = canvas.width - player.width;
+            // Screen boundaries
+            if (player.x < 20) player.x = 20;
+            if (player.x > canvas.width - player.width - 20) player.x = canvas.width - player.width - 20;
 
-            // Bullets movement
+            // Bullet movement
             for (let i = bullets.length - 1; i >= 0; i--) {
                 bullets[i].y -= bullets[i].speed;
                 if (bullets[i].y < 0) {
@@ -269,9 +272,45 @@
                 }
             }
 
-            // Check if all aliens are defeated to spawn/activate the Princess goal
-            let activeAliensCount = aliens.filter(a => a.alive).length;
-            if (activeAliensCount === 0) {
+            // Classic Space Invaders Group March Logic
+            alienStepTimer++;
+            let activeAliens = aliens.filter(a => a.alive);
+            
+            // Speed up invaders as they get destroyed (core Space Invaders feature)
+            let dynamicInterval = Math.max(8, alienStepInterval - (32 - activeAliens.length));
+
+            if (alienStepTimer >= dynamicInterval && activeAliens.length > 0) {
+                alienStepTimer = 0;
+                let hitEdge = false;
+
+                // Check if any active alien hits the side boundary
+                for (let a of activeAliens) {
+                    if ((alienDirection === 1 && a.x + a.width >= canvas.width - 40) ||
+                        (alienDirection === -1 && a.x <= 40)) {
+                        hitEdge = true;
+                        break;
+                    }
+                }
+
+                if (hitEdge) {
+                    alienDirection *= -1; // Switch direction
+                    for (let a of aliens) {
+                        a.y += 16; // Drop down a row
+                        // Check if invaders reached bottom/player line (Game Over condition -> restart level)
+                        if (a.alive && a.y >= player.y - 15) {
+                            loadLevel(currentLevel);
+                            return;
+                        }
+                    }
+                } else {
+                    for (let a of aliens) {
+                        a.x += alienDirection * 12; // Step sideways
+                    }
+                }
+            }
+
+            // Check if all aliens are cleared -> Activate Princess Goal
+            if (activeAliens.length === 0) {
                 targetPrincess.active = true;
             }
 
@@ -297,7 +336,6 @@
                     if (b.x < targetPrincess.x + targetPrincess.width && b.x + b.width > targetPrincess.x &&
                         b.y < targetPrincess.y + targetPrincess.height && b.y + b.height > targetPrincess.y) {
                         
-                        // Level cleared!
                         bullets.splice(i, 1);
                         advanceLevel();
                     }
@@ -310,7 +348,6 @@
                 currentLevel++;
                 loadLevel(currentLevel);
             } else {
-                // Game Won completely
                 gameActive = false;
                 canvas.style.display = 'none';
                 document.getElementById('hud').style.display = 'none';
@@ -335,8 +372,8 @@
                 ctx.fillRect(b.x, b.y, b.width, b.height);
             }
 
-            // Draw Aliens
-            ctx.font = '32px serif';
+            // Draw Invader Grid
+            ctx.font = '28px serif';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             for (let a of aliens) {
