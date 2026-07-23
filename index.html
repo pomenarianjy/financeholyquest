@@ -92,7 +92,6 @@
             display: block;
             background-size: cover;
             background-position: center;
-            /* Forces crisp, sharp pixel rendering for loaded PNG sprites */
             image-rendering: pixelated;
             image-rendering: crisp-edges;
         }
@@ -131,7 +130,6 @@
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
 
-        // Ensure canvas draws sharp textures instead of blurry anti-aliasing
         ctx.imageSmoothingEnabled = false;
 
         let gameActive = false;
@@ -166,10 +164,10 @@
         princessImg.src = 'princess.png';
 
         let player = {
-            x: 370,
-            y: 530,
-            width: 45,
-            height: 45,
+            x: 360,
+            y: 510,
+            width: 80,
+            height: 80,
             speed: 7
         };
 
@@ -178,20 +176,10 @@
         let targetPrincess = null;
         let keys = {};
         let chainOffset = 0;
+        let bulletCooldown = 0;
 
         window.addEventListener('keydown', (e) => {
             keys[e.code] = true;
-            if ((e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'KeyW') && gameActive) {
-                if (bullets.length === 0) {
-                    bullets.push({
-                        x: player.x + player.width / 2 - 3,
-                        y: player.y,
-                        width: 6,
-                        height: 14,
-                        speed: 9
-                    });
-                }
-            }
         });
 
         window.addEventListener('keyup', (e) => {
@@ -213,10 +201,12 @@
             document.getElementById('level-indicator').innerText = stageNames[level - 1];
             canvas.style.backgroundImage = `url('${backgrounds[level - 1]}')`;
             
-            player.x = 370;
+            player.x = 360;
+            player.y = 510;
             bullets = [];
             chainMonsters = [];
             chainOffset = 0;
+            bulletCooldown = 0;
 
             const alienEmojis = stageAliens[level - 1];
             
@@ -232,10 +222,10 @@
             }
 
             targetPrincess = {
-                x: canvas.width / 2 - 25,
-                y: 15,
-                width: 50,
-                height: 50,
+                x: canvas.width / 2 - 40,
+                y: 10,
+                width: 80,
+                height: 80,
                 active: false
             };
         }
@@ -243,18 +233,40 @@
         function update() {
             if (!gameActive) return;
 
-            // Knight horizontal controls
-            if (keys['ArrowLeft'] || keys['KeyA']) {
-                player.x -= player.speed;
-            }
-            if (keys['ArrowRight'] || keys['KeyD']) {
-                player.x += player.speed;
+            let activeCount = chainMonsters.filter(m => m.alive).length;
+
+            if (bulletCooldown > 0) bulletCooldown--;
+
+            if ((keys['Space'] || keys['ArrowUp'] || keys['KeyW']) && bulletCooldown === 0) {
+                bullets.push({
+                    x: player.x + player.width / 2 - 3,
+                    y: player.y,
+                    width: 6,
+                    height: 14,
+                    speed: 12
+                });
+                bulletCooldown = 6;
             }
 
-            if (player.x < 15) player.x = 15;
-            if (player.x > canvas.width - player.width - 15) player.x = canvas.width - player.width - 15;
+            if (activeCount > 0) {
+                if (keys['ArrowLeft'] || keys['KeyA']) player.x -= player.speed;
+                if (keys['ArrowRight'] || keys['KeyD']) player.x += player.speed;
 
-            // Bullets movement
+                if (player.x < 15) player.x = 15;
+                if (player.x > canvas.width - player.width - 15) player.x = canvas.width - player.width - 15;
+                player.y = 510; 
+            } else {
+                if (keys['ArrowLeft'] || keys['KeyA']) player.x -= player.speed;
+                if (keys['ArrowRight'] || keys['KeyD']) player.x += player.speed;
+                if (keys['ArrowUp'] || keys['KeyW']) player.y -= player.speed;
+                if (keys['ArrowDown'] || keys['KeyS']) player.y += player.speed;
+
+                if (player.x < 10) player.x = 10;
+                if (player.x > canvas.width - player.width - 10) player.x = canvas.width - player.width - 10;
+                if (player.y < 10) player.y = 10;
+                if (player.y > canvas.height - player.height - 10) player.y = canvas.height - player.height - 10;
+            }
+
             for (let i = bullets.length - 1; i >= 0; i--) {
                 bullets[i].y -= bullets[i].speed;
                 if (bullets[i].y < 0) {
@@ -262,41 +274,38 @@
                 }
             }
 
-            // High-speed rolling chain with aggressive serpentine weave
-            chainOffset += 3.2 + (currentLevel * 0.6);
+            if (activeCount > 0) {
+                chainOffset += 3.2 + (currentLevel * 0.6);
 
-            let activeCount = 0;
-            chainMonsters.forEach((m, idx) => {
-                if (m.alive) {
-                    activeCount++;
-                    let progressDist = (idx * 30) + chainOffset;
-                    let row = Math.floor(progressDist / 650);
-                    let distanceIntoRow = progressDist % 650;
+                chainMonsters.forEach((m, idx) => {
+                    if (m.alive) {
+                        let progressDist = (idx * 30) + chainOffset;
+                        let row = Math.floor(progressDist / 650);
+                        let distanceIntoRow = progressDist % 650;
 
-                    let xPos, yPos;
-                    if (row % 2 === 0) {
-                        xPos = 60 + distanceIntoRow + Math.sin(progressDist * 0.05) * 40;
-                    } else {
-                        xPos = 740 - distanceIntoRow - Math.cos(progressDist * 0.05) * 40;
+                        let xPos, yPos;
+                        if (row % 2 === 0) {
+                            xPos = 60 + distanceIntoRow + Math.sin(progressDist * 0.05) * 40;
+                        } else {
+                            xPos = 740 - distanceIntoRow - Math.cos(progressDist * 0.05) * 40;
+                        }
+                        yPos = 40 + (row * 35) + (distanceIntoRow * 0.22);
+
+                        m.x = xPos;
+                        m.y = yPos;
+
+                        if (m.y >= player.y - 12 && m.x > player.x - 15 && m.x < player.x + player.width + 15) {
+                            loadLevel(currentLevel);
+                            return;
+                        }
                     }
-                    yPos = 40 + (row * 35) + (distanceIntoRow * 0.22);
+                });
+            }
 
-                    m.x = xPos;
-                    m.y = yPos;
-
-                    // Chain hits the knight -> Level reset penalty
-                    if (m.y >= player.y - 12 && m.x > player.x - 15 && m.x < player.x + player.width + 15) {
-                        loadLevel(currentLevel);
-                        return;
-                    }
-                }
-            });
-
-            if (activeCount === 0) {
+            if (activeCount === 0 && !targetPrincess.active) {
                 targetPrincess.active = true;
             }
 
-            // Bullet vs Chain Monster Collisions
             for (let i = bullets.length - 1; i >= 0; i--) {
                 let b = bullets[i];
                 for (let m of chainMonsters) {
@@ -311,7 +320,6 @@
                 }
             }
 
-            // Knight touches Princess to complete level
             if (targetPrincess.active) {
                 if (player.x < targetPrincess.x + targetPrincess.width &&
                     player.x + player.width > targetPrincess.x &&
@@ -337,30 +345,21 @@
         function draw() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-            // Draw chain connection lines
-            ctx.strokeStyle = '#ff3333';
-            ctx.lineWidth = 2;
-            ctx.beginPath();
-            let first = true;
-            for (let m of chainMonsters) {
-                if (m.alive) {
-                    if (first) {
-                        ctx.moveTo(m.x + m.width / 2, m.y + m.height / 2);
-                        first = false;
-                    } else {
-                        ctx.lineTo(m.x + m.width / 2, m.y + m.height / 2);
-                    }
-                }
-            }
-            ctx.stroke();
+            // Draw glowing white neon outline / halo for Knight
+            ctx.save();
+            ctx.shadowColor = '#ffffff';
+            ctx.shadowBlur = 18;
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 3;
+            ctx.strokeRect(player.x - 2, player.y - 2, player.width + 4, player.height + 4);
 
-            // Draw Knight Player (Crisp Rendering)
             if (knightImg.complete && knightImg.naturalHeight !== 0) {
                 ctx.drawImage(knightImg, player.x, player.y, player.width, player.height);
             } else {
                 ctx.fillStyle = '#3498db';
                 ctx.fillRect(player.x, player.y, player.width, player.height);
             }
+            ctx.restore();
 
             // Draw Bullets
             ctx.fillStyle = '#00ffff';
@@ -368,7 +367,7 @@
                 ctx.fillRect(b.x, b.y, b.width, b.height);
             }
 
-            // Draw Rolling Chain Emoji Monsters
+            // Draw Rolling Emoji Monsters
             ctx.font = '26px serif';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
@@ -378,14 +377,22 @@
                 }
             }
 
-            // Draw Princess Goal (Crisp Rendering)
+            // Draw glowing white neon outline / halo for Princess
             if (targetPrincess.active) {
+                ctx.save();
+                ctx.shadowColor = '#ffffff';
+                ctx.shadowBlur = 22;
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 3;
+                ctx.strokeRect(targetPrincess.x - 2, targetPrincess.y - 2, targetPrincess.width + 4, targetPrincess.height + 4);
+
                 if (princessImg.complete && princessImg.naturalHeight !== 0) {
                     ctx.drawImage(princessImg, targetPrincess.x, targetPrincess.y, targetPrincess.width, targetPrincess.height);
                 } else {
                     ctx.fillStyle = '#ff69b4';
                     ctx.fillRect(targetPrincess.x, targetPrincess.y, targetPrincess.width, targetPrincess.height);
                 }
+                ctx.restore();
             }
         }
 
