@@ -131,7 +131,6 @@
         let gameActive = false;
         let score = 0;
         let currentLevel = 1;
-        let waveIndex = 0; // Tracks multiple waves per level
 
         const backgrounds = [
             'background1.png',
@@ -169,19 +168,13 @@
         };
 
         let bullets = [];
-        let aliens = [];
+        let chainMonsters = [];
         let targetPrincess = null;
         let keys = {};
-
-        // Space Invaders forward-marching mechanics with slight pushback and multiple arrangements
-        let alienDirection = 1; 
-        let alienStepTimer = 0;
-        let alienStepInterval = 35;
-        let advanceCounter = 0; // Controls forward march vs minor floating back
+        let chainOffset = 0;
 
         window.addEventListener('keydown', (e) => {
             keys[e.code] = true;
-            // Strict 1978 single-bullet rule per shot
             if ((e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'KeyW') && gameActive) {
                 if (bullets.length === 0) {
                     bullets.push({
@@ -205,62 +198,35 @@
             canvas.style.display = 'block';
             gameActive = true;
             currentLevel = 1;
-            waveIndex = 0;
-            loadLevel(currentLevel, waveIndex);
+            loadLevel(currentLevel);
             gameLoop();
         }
 
-        function loadLevel(level, wave) {
+        function loadLevel(level) {
             currentLevel = level;
-            waveIndex = wave;
-            document.getElementById('level-indicator').innerText = `${stageNames[level - 1]} (Wave ${wave + 1}/2)`;
+            document.getElementById('level-indicator').innerText = stageNames[level - 1];
             canvas.style.backgroundImage = `url('${backgrounds[level - 1]}')`;
             
             player.x = 370;
             bullets = [];
-            aliens = [];
-            alienDirection = 1;
-            advanceCounter = 0;
+            chainMonsters = [];
+            chainOffset = 0;
 
             const alienEmojis = stageAliens[level - 1];
             
-            // Different wave arrangements to vary enemy shapes coming at the knight
-            if (wave === 0) {
-                // Wave 1: Standard 4x8 rectangular grid
-                for (let r = 0; r < 4; r++) {
-                    for (let c = 0; c < 8; c++) {
-                        aliens.push({
-                            x: 120 + c * 65,
-                            y: 50 + r * 40,
-                            width: 36,
-                            height: 36,
-                            emoji: alienEmojis[r % alienEmojis.length],
-                            alive: true
-                        });
-                    }
-                }
-            } else {
-                // Wave 2: V-Formation / Diamond incoming wave arrangement
-                const pattern = [
-                    [3, 4],
-                    [2, 3, 4, 5],
-                    [1, 2, 3, 4, 5, 6],
-                    [0, 1, 2, 3, 4, 5, 6, 7]
-                ];
-                pattern.forEach((rowCols, r) => {
-                    rowCols.forEach(c => {
-                        aliens.push({
-                            x: 120 + c * 65,
-                            y: 50 + r * 45,
-                            width: 36,
-                            height: 36,
-                            emoji: alienEmojis[r % alienEmojis.length],
-                            alive: true
-                        });
-                    });
+            // Generate rolling chain of connected emoji monsters
+            let totalMonsters = 30;
+            for (let i = 0; i < totalMonsters; i++) {
+                chainMonsters.push({
+                    index: i,
+                    emoji: alienEmojis[i % alienEmojis.length],
+                    alive: true,
+                    width: 36,
+                    height: 36
                 });
             }
 
+            // Target Princess spawns at top center once chain is cleared
             targetPrincess = {
                 x: canvas.width / 2 - 25,
                 y: 15,
@@ -273,7 +239,7 @@
         function update() {
             if (!gameActive) return;
 
-            // Strict horizontal controls for the knight
+            // Knight horizontal controls
             if (keys['ArrowLeft'] || keys['KeyA']) {
                 player.x -= player.speed;
             }
@@ -292,67 +258,48 @@
                 }
             }
 
-            // Space Invaders Marching Engine with Forward Pressure & Minor Back-Floating
-            alienStepTimer++;
-            let activeAliens = aliens.filter(a => a.alive);
-            let dynamicInterval = Math.max(6, alienStepInterval - (24 - activeAliens.length));
+            // Rolling chain movement
+            chainOffset += 0.8 + (currentLevel * 0.2);
 
-            if (alienStepTimer >= dynamicInterval && activeAliens.length > 0) {
-                alienStepTimer = 0;
-                let hitEdge = false;
+            let activeCount = 0;
+            chainMonsters.forEach((m, idx) => {
+                if (m.alive) {
+                    activeCount++;
+                    let progressDist = (idx * 45) + chainOffset;
+                    let row = Math.floor(progressDist / 700);
+                    let distanceIntoRow = progressDist % 700;
 
-                for (let a of activeAliens) {
-                    if ((alienDirection === 1 && a.x + a.width >= canvas.width - 30) ||
-                        (alienDirection === -1 && a.x <= 30)) {
-                        hitEdge = true;
-                        break;
+                    let xPos, yPos;
+                    if (row % 2 === 0) {
+                        xPos = 80 + distanceIntoRow;
+                    } else {
+                        xPos = 720 - distanceIntoRow;
+                    }
+                    yPos = 50 + (row * 45) + (distanceIntoRow * 0.15);
+
+                    m.x = xPos;
+                    m.y = yPos;
+
+                    // Chain hits the knight -> Level reset
+                    if (m.y >= player.y - 15 && m.x > player.x - 20 && m.x < player.x + player.width + 20) {
+                        loadLevel(currentLevel);
+                        return;
                     }
                 }
+            });
 
-                if (hitEdge) {
-                    alienDirection *= -1;
-                    advanceCounter++;
-                    
-                    for (let a of aliens) {
-                        // Main forward advance, occasionally floating back slightly every 4 wall hits
-                        if (advanceCounter % 4 === 0) {
-                            a.y -= 10; // Floating backward a little bit
-                        } else {
-                            a.y += 18; // Mainly coming forward toward the knight!
-                        }
-
-                        // Breach check: if monsters reach the bottom line, restart wave
-                        if (a.alive && a.y >= player.y - 10) {
-                            loadLevel(currentLevel, waveIndex);
-                            return;
-                        }
-                    }
-                } else {
-                    for (let a of aliens) {
-                        a.x += alienDirection * 12;
-                    }
-                }
+            // When chain is fully cleared, activate Princess
+            if (activeCount === 0) {
+                targetPrincess.active = true;
             }
 
-            // Wave progression & Princess goal trigger
-            if (activeAliens.length === 0) {
-                if (waveIndex === 0) {
-                    // Advance to Wave 2 of the same level
-                    loadLevel(currentLevel, 1);
-                    return;
-                } else {
-                    // Both waves cleared -> Princess appears!
-                    targetPrincess.active = true;
-                }
-            }
-
-            // Bullet vs Alien Collisions
+            // Bullet vs Chain Monster Collisions
             for (let i = bullets.length - 1; i >= 0; i--) {
                 let b = bullets[i];
-                for (let a of aliens) {
-                    if (a.alive && b.x < a.x + a.width && b.x + b.width > a.x &&
-                        b.y < a.y + a.height && b.y + b.height > a.y) {
-                        a.alive = false;
+                for (let m of chainMonsters) {
+                    if (m.alive && b.x < m.x + m.width && b.x + b.width > m.x &&
+                        b.y < m.y + m.height && b.y + b.height > m.y) {
+                        m.alive = false;
                         bullets.splice(i, 1);
                         score += 100;
                         document.getElementById('score-indicator').innerText = `Score: ${score}`;
@@ -361,15 +308,13 @@
                 }
             }
 
-            // Bullet vs Princess Collision (Level complete)
+            // Knight touches Princess (Win Level Condition)
             if (targetPrincess.active) {
-                for (let i = bullets.length - 1; i >= 0; i--) {
-                    let b = bullets[i];
-                    if (b.x < targetPrincess.x + targetPrincess.width && b.x + b.width > targetPrincess.x &&
-                        b.y < targetPrincess.y + targetPrincess.height && b.y + b.height > targetPrincess.y) {
-                        bullets.splice(i, 1);
-                        advanceStage();
-                    }
+                if (player.x < targetPrincess.x + targetPrincess.width &&
+                    player.x + player.width > targetPrincess.x &&
+                    player.y < targetPrincess.y + targetPrincess.height &&
+                    player.y + player.height > targetPrincess.y) {
+                    advanceStage();
                 }
             }
         }
@@ -377,8 +322,7 @@
         function advanceStage() {
             if (currentLevel < 4) {
                 currentLevel++;
-                waveIndex = 0;
-                loadLevel(currentLevel, waveIndex);
+                loadLevel(currentLevel);
             } else {
                 gameActive = false;
                 canvas.style.display = 'none';
@@ -390,7 +334,24 @@
         function draw() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-            // Draw Knight Player (horizontal movement only)
+            // Draw chain links
+            ctx.strokeStyle = '#d4af37';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            let first = true;
+            for (let m of chainMonsters) {
+                if (m.alive) {
+                    if (first) {
+                        ctx.moveTo(m.x + m.width / 2, m.y + m.height / 2);
+                        first = false;
+                    } else {
+                        ctx.lineTo(m.x + m.width / 2, m.y + m.height / 2);
+                    }
+                }
+            }
+            ctx.stroke();
+
+            // Draw Knight Player
             if (knightImg.complete && knightImg.naturalHeight !== 0) {
                 ctx.drawImage(knightImg, player.x, player.y, player.width, player.height);
             } else {
@@ -404,17 +365,17 @@
                 ctx.fillRect(b.x, b.y, b.width, b.height);
             }
 
-            // Draw Incoming Emoji Monsters
-            ctx.font = '30px serif';
+            // Draw Rolling Chain Emoji Monsters
+            ctx.font = '28px serif';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
-            for (let a of aliens) {
-                if (a.alive) {
-                    ctx.fillText(a.emoji, a.x + a.width / 2, a.y + a.height / 2);
+            for (let m of chainMonsters) {
+                if (m.alive) {
+                    ctx.fillText(m.emoji, m.x + m.width / 2, m.y + m.height / 2);
                 }
             }
 
-            // Draw Princess Goal
+            // Draw Princess Goal (Knight must touch her to win level)
             if (targetPrincess.active) {
                 if (princessImg.complete && princessImg.naturalHeight !== 0) {
                     ctx.drawImage(princessImg, targetPrincess.x, targetPrincess.y, targetPrincess.width, targetPrincess.height);
