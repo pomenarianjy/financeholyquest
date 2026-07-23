@@ -25,8 +25,8 @@
             position: relative;
             width: 800px;
             height: 600px;
-            border: 4px solid #0f0;
-            box-shadow: 0 0 20px rgba(0, 255, 0, 0.5);
+            border: 4px solid #d4af37;
+            box-shadow: 0 0 20px rgba(212, 175, 55, 0.7);
             overflow: hidden;
             background-color: #000;
         }
@@ -82,7 +82,7 @@
             justify-content: space-between;
             font-size: 18px;
             font-weight: bold;
-            color: #0f0;
+            color: #ffd700;
             text-shadow: 2px 2px #000;
             z-index: 5;
             pointer-events: none;
@@ -111,8 +111,8 @@
 
         <!-- Main Game HUD -->
         <div id="hud" style="display: none;">
-            <div id="level-indicator">LEVEL 1: THE TOWN</div>
-            <div id="score-indicator">SCORE: 000000</div>
+            <div id="level-indicator">Level 1: The Town</div>
+            <div id="score-indicator">Score: 0</div>
         </div>
 
         <!-- Canvas -->
@@ -128,12 +128,11 @@
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
 
-        // Game Core State Variables
         let gameActive = false;
         let score = 0;
         let currentLevel = 1;
+        let waveIndex = 0; // Tracks multiple waves per level
 
-        // Assets Configuration
         const backgrounds = [
             'background1.png',
             'background2.png',
@@ -142,13 +141,12 @@
         ];
         
         const stageNames = [
-            "LEVEL 1: THE TOWN",
-            "LEVEL 2: THE DRAGON",
-            "LEVEL 3: THE KNIGHT",
-            "LEVEL 4: THE PRINCESS"
+            "Level 1: The Town",
+            "Level 2: The Dragon",
+            "Level 3: The Knight",
+            "Level 4: The Princess"
         ];
 
-        // 1978 Space Invaders styled Alien Rows mapping to your custom emojis per stage
         const stageAliens = [
             ['🐀', '🦇', '🕷️', '🐍'],
             ['🧟‍♂️', '🧌', '🐉', '🐲'],
@@ -162,38 +160,36 @@
         const princessImg = new Image();
         princessImg.src = 'princess.png';
 
-        // 1978 Arcade Player (Cannon/Knight) Specification
         let player = {
             x: 370,
             y: 530,
-            width: 44,
-            height: 44,
-            speed: 4
+            width: 45,
+            height: 45,
+            speed: 6
         };
 
-        // Projectiles & Entities Arrays
         let bullets = [];
         let aliens = [];
         let targetPrincess = null;
         let keys = {};
 
-        // 1978 Original Arcade Invader March Engine Variables
-        let alienDirection = 1; // 1 moves right, -1 moves left
+        // Space Invaders forward-marching mechanics with slight pushback and multiple arrangements
+        let alienDirection = 1; 
         let alienStepTimer = 0;
-        let alienStepInterval = 45; // Base frame delay per grid step
+        let alienStepInterval = 35;
+        let advanceCounter = 0; // Controls forward march vs minor floating back
 
-        // Input Listeners Configuration
         window.addEventListener('keydown', (e) => {
             keys[e.code] = true;
-            // Space Invaders strict hardware rule: only 1 player bullet allowed on screen concurrently
+            // Strict 1978 single-bullet rule per shot
             if ((e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'KeyW') && gameActive) {
                 if (bullets.length === 0) {
                     bullets.push({
-                        x: player.x + player.width / 2 - 2,
+                        x: player.x + player.width / 2 - 3,
                         y: player.y,
-                        width: 4,
-                        height: 12,
-                        speed: 7
+                        width: 6,
+                        height: 14,
+                        speed: 8
                     });
                 }
             }
@@ -208,44 +204,68 @@
             document.getElementById('hud').style.display = 'flex';
             canvas.style.display = 'block';
             gameActive = true;
-            loadLevel(currentLevel);
+            currentLevel = 1;
+            waveIndex = 0;
+            loadLevel(currentLevel, waveIndex);
             gameLoop();
         }
 
-        function loadLevel(level) {
+        function loadLevel(level, wave) {
             currentLevel = level;
-            document.getElementById('level-indicator').innerText = stageNames[level - 1];
+            waveIndex = wave;
+            document.getElementById('level-indicator').innerText = `${stageNames[level - 1]} (Wave ${wave + 1}/2)`;
             canvas.style.backgroundImage = `url('${backgrounds[level - 1]}')`;
             
             player.x = 370;
             bullets = [];
             aliens = [];
             alienDirection = 1;
-            alienStepInterval = 45;
+            advanceCounter = 0;
 
-            // Build classic 1978 Space Invaders Formation Matrix (4 Rows x 8 Columns)
             const alienEmojis = stageAliens[level - 1];
-            const rows = 4;
-            const cols = 8;
-            for (let r = 0; r < rows; r++) {
-                for (let c = 0; c < cols; c++) {
-                    aliens.push({
-                        x: 130 + c * 65,
-                        y: 80 + r * 45,
-                        width: 36,
-                        height: 36,
-                        emoji: alienEmojis[r],
-                        alive: true
-                    });
+            
+            // Different wave arrangements to vary enemy shapes coming at the knight
+            if (wave === 0) {
+                // Wave 1: Standard 4x8 rectangular grid
+                for (let r = 0; r < 4; r++) {
+                    for (let c = 0; c < 8; c++) {
+                        aliens.push({
+                            x: 120 + c * 65,
+                            y: 50 + r * 40,
+                            width: 36,
+                            height: 36,
+                            emoji: alienEmojis[r % alienEmojis.length],
+                            alive: true
+                        });
+                    }
                 }
+            } else {
+                // Wave 2: V-Formation / Diamond incoming wave arrangement
+                const pattern = [
+                    [3, 4],
+                    [2, 3, 4, 5],
+                    [1, 2, 3, 4, 5, 6],
+                    [0, 1, 2, 3, 4, 5, 6, 7]
+                ];
+                pattern.forEach((rowCols, r) => {
+                    rowCols.forEach(c => {
+                        aliens.push({
+                            x: 120 + c * 65,
+                            y: 50 + r * 45,
+                            width: 36,
+                            height: 36,
+                            emoji: alienEmojis[r % alienEmojis.length],
+                            alive: true
+                        });
+                    });
+                });
             }
 
-            // Target Princess setup (Spawns at top center once all invaders are eradicated)
             targetPrincess = {
-                x: canvas.width / 2 - 22,
+                x: canvas.width / 2 - 25,
                 y: 15,
-                width: 45,
-                height: 45,
+                width: 50,
+                height: 50,
                 active: false
             };
         }
@@ -253,7 +273,7 @@
         function update() {
             if (!gameActive) return;
 
-            // Player Arcade Movement (Left / Right)
+            // Strict horizontal controls for the knight
             if (keys['ArrowLeft'] || keys['KeyA']) {
                 player.x -= player.speed;
             }
@@ -261,11 +281,10 @@
                 player.x += player.speed;
             }
 
-            // Screen Borders Check
             if (player.x < 15) player.x = 15;
             if (player.x > canvas.width - player.width - 15) player.x = canvas.width - player.width - 15;
 
-            // Player Bullet Upward Trajectory
+            // Bullets movement
             for (let i = bullets.length - 1; i >= 0; i--) {
                 bullets[i].y -= bullets[i].speed;
                 if (bullets[i].y < 0) {
@@ -273,49 +292,61 @@
                 }
             }
 
-            // 1978 Original Arcade Invader March & Tempo Acceleration Mechanics
+            // Space Invaders Marching Engine with Forward Pressure & Minor Back-Floating
             alienStepTimer++;
             let activeAliens = aliens.filter(a => a.alive);
-            
-            // Authentic Space Invaders behavior: Speed increases progressively as total alien count drops
-            let dynamicInterval = Math.max(6, alienStepInterval - (32 - activeAliens.length));
+            let dynamicInterval = Math.max(6, alienStepInterval - (24 - activeAliens.length));
 
             if (alienStepTimer >= dynamicInterval && activeAliens.length > 0) {
                 alienStepTimer = 0;
-                let hitWall = false;
+                let hitEdge = false;
 
-                // Check edge collisions for formation reversal
                 for (let a of activeAliens) {
                     if ((alienDirection === 1 && a.x + a.width >= canvas.width - 30) ||
                         (alienDirection === -1 && a.x <= 30)) {
-                        hitWall = true;
+                        hitEdge = true;
                         break;
                     }
                 }
 
-                if (hitWall) {
-                    alienDirection *= -1; // Reverse horizontal trajectory
+                if (hitEdge) {
+                    alienDirection *= -1;
+                    advanceCounter++;
+                    
                     for (let a of aliens) {
-                        a.y += 14; // Drop formation down by one tier
-                        // Space Invaders arcade rule: Invasion breach condition triggers level reset
+                        // Main forward advance, occasionally floating back slightly every 4 wall hits
+                        if (advanceCounter % 4 === 0) {
+                            a.y -= 10; // Floating backward a little bit
+                        } else {
+                            a.y += 18; // Mainly coming forward toward the knight!
+                        }
+
+                        // Breach check: if monsters reach the bottom line, restart wave
                         if (a.alive && a.y >= player.y - 10) {
-                            loadLevel(currentLevel);
+                            loadLevel(currentLevel, waveIndex);
                             return;
                         }
                     }
                 } else {
                     for (let a of aliens) {
-                        a.x += alienDirection * 10; // Lateral step forward
+                        a.x += alienDirection * 12;
                     }
                 }
             }
 
-            // Win condition trigger: When all stage aliens are destroyed, materialize the Princess goal
+            // Wave progression & Princess goal trigger
             if (activeAliens.length === 0) {
-                targetPrincess.active = true;
+                if (waveIndex === 0) {
+                    // Advance to Wave 2 of the same level
+                    loadLevel(currentLevel, 1);
+                    return;
+                } else {
+                    // Both waves cleared -> Princess appears!
+                    targetPrincess.active = true;
+                }
             }
 
-            // Bullet-to-Alien Hit Detection
+            // Bullet vs Alien Collisions
             for (let i = bullets.length - 1; i >= 0; i--) {
                 let b = bullets[i];
                 for (let a of aliens) {
@@ -324,19 +355,18 @@
                         a.alive = false;
                         bullets.splice(i, 1);
                         score += 100;
-                        document.getElementById('score-indicator').innerText = `SCORE: ${String(score).padStart(6, '0')}`;
+                        document.getElementById('score-indicator').innerText = `Score: ${score}`;
                         break;
                     }
                 }
             }
 
-            // Bullet-to-Princess Hit Detection (Advances Stage / Completes Quest)
+            // Bullet vs Princess Collision (Level complete)
             if (targetPrincess.active) {
                 for (let i = bullets.length - 1; i >= 0; i--) {
                     let b = bullets[i];
                     if (b.x < targetPrincess.x + targetPrincess.width && b.x + b.width > targetPrincess.x &&
                         b.y < targetPrincess.y + targetPrincess.height && b.y + b.height > targetPrincess.y) {
-                        
                         bullets.splice(i, 1);
                         advanceStage();
                     }
@@ -347,7 +377,8 @@
         function advanceStage() {
             if (currentLevel < 4) {
                 currentLevel++;
-                loadLevel(currentLevel);
+                waveIndex = 0;
+                loadLevel(currentLevel, waveIndex);
             } else {
                 gameActive = false;
                 canvas.style.display = 'none';
@@ -359,22 +390,22 @@
         function draw() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-            // Draw Player Knight Entity
+            // Draw Knight Player (horizontal movement only)
             if (knightImg.complete && knightImg.naturalHeight !== 0) {
                 ctx.drawImage(knightImg, player.x, player.y, player.width, player.height);
             } else {
-                ctx.fillStyle = '#0f0';
+                ctx.fillStyle = '#3498db';
                 ctx.fillRect(player.x, player.y, player.width, player.height);
             }
 
-            // Draw Arcade Laser Bullet
-            ctx.fillStyle = '#ffff00';
+            // Draw Bullets
+            ctx.fillStyle = '#ffcc00';
             for (let b of bullets) {
                 ctx.fillRect(b.x, b.y, b.width, b.height);
             }
 
-            // Draw Invader Swarm Matrix using Emojis
-            ctx.font = '28px serif';
+            // Draw Incoming Emoji Monsters
+            ctx.font = '30px serif';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             for (let a of aliens) {
@@ -383,7 +414,7 @@
                 }
             }
 
-            // Draw Target Princess Goal Entity when active
+            // Draw Princess Goal
             if (targetPrincess.active) {
                 if (princessImg.complete && princessImg.naturalHeight !== 0) {
                     ctx.drawImage(princessImg, targetPrincess.x, targetPrincess.y, targetPrincess.width, targetPrincess.height);
